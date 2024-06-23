@@ -3,15 +3,13 @@
 ### Introduction
 In this project I examine mental health trends in the United States during the COVID-19 pandemic, as well as the heterogeneity of these trends among subgroups including age, sex, and education level. 
 
-I analyze data on the proportion of adults in the United States exhibiting symptoms of anxiety or depressive disorder. I expect to find a positive correlation between the likelihood of experiencing symptoms and the number of daily Covid cases and deaths. I also expect to find that minority groups report worse mental health on average.
-
 **I find that on average, each additional increase of daily Covid deaths is associated with a 3.3% increase in the odds of experiencing depression or anxiety, and 0.1% for Covid cases. Reporting male, higher age, higher education, higher income, or hispanic is associated with much lower odds of experiencing anxiety and depression.**
 
 ### Data and Model
 My dataset comprises of approximately 2,700,000 observations from following sources:
 - Time series data from the CDC Household Pulse Survey</u>: records respondents' characteristics and symptoms of anxiety and depressive disorders from April 2020 to October 2021, recorded weekly
 - Time series data from the *Our World in Data* database, which measures the spread of COVID-19 in the United States in terms of total and daily cases and deaths per capita throughout the pandemic
-I use time series data from the CDC Household Pulse Survey, which records characteristics of respondents and their symptoms of anxiety and depressive disorders from April 2020 to October 2021 [@mhdata]. 
+I use time series data from the CDC Household Pulse Survey, which records characteristics of respondents and their symptoms of anxiety and depressive disorders from April 2020 to October 2021. 
 
 In my model, my outcome variable of interest is a dummy variable indicating 1 if the individual exhibits symptoms of depressive or anxiety disorder (*DEP_ANX*). My independent variables are the 7-day rolling average of daily cases and deaths per capita. I control for race, income level, education level, age, marital status, geographic region, and gender.
 
