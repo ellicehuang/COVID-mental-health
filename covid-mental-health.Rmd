@@ -1,0 +1,307 @@
+---
+title: "\\vspace{-1.25cm} \\begin{large} Mental Health Trends in the COVID-19 Pandemic \\end{large}
+  \\vspace{-.75cm}"
+author: "\\vspace{-.75cm} \\begin{normalsize} Ellice Huang \\end{normalsize} \\vspace{-.5cm}"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document:
+    df_print: paged
+bibliography: references.bib 
+nocite: '@*'
+mainfont: EB Garamond
+fontsize: 12pt
+header-includes:
+- \usepackage{sectsty} \subsubsectionfont{\normalfont\itshape}
+- \usepackage{setspace}\onehalfspacing
+---
+
+```{r setup, message=F, warnings=F, echo=F, include=F}
+library(data.table)
+library(plyr)
+library(readr)
+library(stargazer)
+library(ggplot2)
+library(dplyr)
+library(showtext)
+library(showtext)
+```
+
+### Introduction
+
+In this project I examine mental health trends in the United States during the COVID-19 pandemic, as well as the heterogeneity of these trends among subgroups including age, sex, and education level. 
+
+I analyze data on the proportion of adults in the United States exhibiting symptoms of anxiety or depressive disorder. I expect to find a positive correlation between the likelihood of experiencing symptoms and the number of daily Covid cases and deaths. I also expect to find that minority groups report worse mental health on average.
+
+### Data and Preliminary Analysis
+
+I use time series data from the CDC Household Pulse Survey, which records characteristics of respondents and their symptoms of anxiety and depressive disorders from April 2020 to October 2021 [@mhdata]. The unit of observation is by individual, recorded weekly. I also use data from the *Our World in Data database*, which measures the spread of COVID-19 in the United States in terms of total and daily cases and deaths per capita throughout the pandemic [@owiddata]. My dataset comprises of approximately 2,700,000 observations.
+
+In my model, my outcome variable of interest is a dummy variable indicating 1 if the individual exhibits symptoms of depressive or anxiety disorder (*DEP_ANX*). My independent variables are the 7-day rolling average of daily cases and deaths per capita. I control for race, income level, education level, age, marital status, geographic region, and gender.
+
+
+```{r load data, echo=F, include=F}
+# load mental health time series data
+data <- read.csv("finaldata.csv")
+
+# ensure categorical variables are factors and date is date type
+data$dates <- as.Date(data$dates)
+data$EST_ST <- as.factor(data$EST_ST) # state
+data$MS <- as.factor(data$MS) # marital status
+data$RRACE <- as.factor(data$RRACE) # race
+data$EEDUC <- as.factor(data$EEDUC) # education level
+data$REGION.y <- as.factor(data$REGION.y) # region
+data$INCOME <- as.factor(data$INCOME) # income level
+data$AGERANGE <- as.factor(data$AGERANGE) # age range
+data$EGENDER <- as.factor(data$EGENDER) # gender
+
+# load US covid cases/deaths time series data
+uscovid <- read.csv("uscovid.csv", stringsAsFactors = F)
+uscovid[is.na(uscovid)] <- 0 
+uscovid$date <- as.Date.character(uscovid$date)
+```
+
+```{r summary stats, results='asis', echo=F}
+X <- model.matrix(~ DEP_ANX + EGENDER + MS + INCOME + AGERANGE +
+                  RHISPANIC + RRACE + EEDUC + REGION.y - 1 , data=data,
+                  na.action = "na.pass")
+X.df <- data.frame(X)
+colnames(X.df) <- c("dep_anx",
+                   "gender-female", "gender-male",
+                   "maritalstatus-widowed","maritalstatus-divorced",
+                   "maritalstatus-separated","maritalstatus-never",
+                   "income 25-35k", "income 35-50k",
+                   "income 50-75k", "income 75-100k", "income 100-150k",
+                   "income 150-200k", "income >200k",
+                   "age 30-40", "age 40-50",
+                   "age 50-60", "age 60-70", "age 70-80", "age >80",
+                   "nonhispanic",
+                   "race-black", "race-asian", "race-other",
+                   "educ-some hs", "educ- hs", "educ-some col",
+                   "educ-AA", "educ-BA", "educ-grad",
+                   "region-midwest", "region-south", "region-west")
+stargazer(X.df, header=F, title = 'Summary Statistics')
+```
+
+In the graph below, I compare the 7-day rolling average of daily Covid cases and deaths per million people with the proportion of adults with symptoms of depression or anxiety, by week (Week 0=23 April 2020). At first glance, there appears to be a positive correlation between daily cases, deaths, and mental health levels.
+
+``` {r daily covid cases+deaths vs anxiety+dep, message=F, warning=F, echo=F}
+font_add_google("Cormorant Garamond")
+font_add_google("EB Garamond")
+showtext_auto()
+
+par(mfrow=c(1,2))
+# daily cases and deaths, weekly
+
+gridExtra::grid.arrange(
+  ggplot(data %>% group_by(WEEK) %>% summarise(cases=mean(new_cases_smoothed_per_million),
+                                      deaths=mean(new_deaths_smoothed_per_million),
+                                      vax=mean(new_vaccinations_smoothed_per_million)))+
+  geom_line(aes(x=WEEK, y=cases), col="#4B85EB") +
+  geom_line(aes(x=WEEK, y=deaths*100), col="#4BBB6D") +
+  ggtitle("Daily US Covid Cases and Deaths Per Million, 7 Day Rolling Average") +
+  labs(x="Week", y="Cases") +
+  scale_x_continuous(n.breaks = 20) +
+  scale_y_continuous(sec.axis = sec_axis(~./100, name="Deaths"))
+  + theme_light()
+  + theme(text = element_text(family = "Cormorant Garamond", size=8)) +
+  annotate("text", x = 2.8, y = 585, label = "Deaths", size=2.5, fontface="italic") +
+  annotate("text", x = 1.5, y = 200, label = "Cases", size=2.5, fontface="italic")
+  ,
+  ggplot(data %>% group_by(WEEK) %>% summarise(DEP_ANX=mean(DEP_ANX),
+                                      ANX=mean(ANX),
+                                      DEP=mean(DEP)))+
+  geom_line(aes(x=WEEK, y=DEP_ANX), col='purple') +
+  # geom_line(aes(x=WEEK, y=ANX),col='red') +
+  # geom_line(aes(x=WEEK, y=DEP),col='blue') +
+  ggtitle("Proportion of Adults with Depression or Anxiety") +
+  labs(x="Week", y="Proportion") +
+  scale_x_continuous(n.breaks = 20) +
+  scale_y_continuous(sec.axis = sec_axis(~.*1, name=""))
+  + theme_light()
+  + theme(text = element_text(family = "Cormorant Garamond", size=8)) 
+  ,
+  ncol=1, nrow=3
+)
+```
+
+The figure below visualizes the heterogeneity of trends of the proportion of adults exhibiting depression or anxiety symptoms among subgroups. It appears that individuals reporting higher education levels, higher yearly income, or higher age have better mental health on average. Individuals that identify as Asian or White have the lowest proportions, as well as married and widowed individuals. Males have a significantly lower proportion than women. 
+\
+
+```{r visualizations by control vars, warning=F, echo=F}
+a <- data[,c('WEEK','EGENDER','AGERANGE','INCOME','WRKLOSS','ANYWORK','RRACE',
+                'EEDUC','RHISPANIC','THHLD_NUMPER','MS',
+                'REGION.y','DIVISION','DEP','ANX','DEP_ANX')]
+
+gridExtra::grid.arrange(
+  
+  ggplot(aggregate(a, by=list(a$WEEK, a$EGENDER), FUN=mean)) +
+    geom_line(aes(x=Group.1, y=DEP_ANX, group=Group.2, color=Group.2), lwd=0.2) +
+    ggtitle("Proportion of Adults with Depression or Anxiety, by Gender") +
+    labs(x="Week", y="Proportion", col='') +
+    theme_light() +
+    theme(text = element_text(family = "Cormorant Garamond", size=5.5),
+          legend.key.size = unit(0.5, 'lines'),
+          legend.text=element_text(size=6),
+          legend.margin=margin(1,1,1,1, unit="pt"),
+          legend.box.margin=margin(1,1,1,1, unit="pt")) +
+    scale_x_continuous(n.breaks = 10) +
+    scale_color_hue(labels = c('F','M')) ,
+  
+  ggplot(aggregate(a, by=list(a$WEEK, a$RRACE), FUN=mean)) +
+    geom_line(aes(x=Group.1, y=DEP_ANX, group=Group.2, color=Group.2), lwd=0.2) +
+    ggtitle("Proportion of Adults with Depression or Anxiety, by Race") +
+    labs(x="Week", y="Proportion", col='') +
+    scale_color_hue(labels = c("white", "black", "asian", "other")) +
+    theme_light() +
+    theme(text = element_text(family = "Cormorant Garamond", size=5.5),
+          legend.key.size = unit(0.5, 'lines'),
+          legend.text=element_text(size=6),
+          legend.margin=margin(1,1,1,1, unit="pt"),
+          legend.box.margin=margin(1,1,1,1, unit="pt")) +
+    scale_x_continuous(n.breaks = 10) ,
+  
+  ggplot(aggregate(a, by=list(a$WEEK, a$INCOME), FUN=mean)) +
+    geom_line(aes(x=Group.1, y=DEP_ANX, group=Group.2, color=Group.2), lwd=0.2) +
+    ggtitle("Proportion of Adults with Depression or Anxiety, by Income") +
+    labs(x="Week", y="Proportion", col='') +
+    scale_color_hue(labels=c("<25k", "25-35k", "35-50k",
+                               "50k-75k", "75-100k", "100-150k",
+                               "150-200k", ">200k")) +
+    theme_light() +
+    theme(text = element_text(family = "Cormorant Garamond", size=5.5),
+          legend.key.size = unit(0.5, 'lines'),
+          legend.text=element_text(size=6),
+          legend.margin=margin(1,1,1,1, unit="pt"),
+          legend.box.margin=margin(1,1,1,1, unit="pt")) +
+    scale_x_continuous(n.breaks = 10) ,
+  
+  ggplot(aggregate(a, by=list(a$WEEK, a$AGERANGE), FUN=mean)) +
+    geom_line(aes(x=Group.1, y=DEP_ANX, group=Group.2, color=Group.2), lwd=0.2) +
+    ggtitle("Proportion of Adults with Depression or Anxiety, by Age") +
+    labs(x="Week", y="Proportion", col='') +
+    scale_color_hue(labels=c("<20", "20-30","30-40", "40-50",
+                               "50-60", "60-70", "70-80", ">80")) +
+    theme_light() +
+    theme(text = element_text(family = "Cormorant Garamond", size=5.5),
+          legend.key.size = unit(0.5, 'lines'),
+          legend.text=element_text(size=6),
+          legend.margin=margin(1,1,1,1, unit="pt"),
+          legend.box.margin=margin(1,1,1,1, unit="pt")) +
+    scale_x_continuous(n.breaks = 10) ,
+  
+  ggplot(aggregate(a, by=list(a$WEEK, a$EEDUC), FUN=mean)) +
+    geom_line(aes(x=Group.1, y=DEP_ANX, group=Group.2, color=Group.2), lwd=0.2) +
+    ggtitle("Proportion of Adults with Depression or Anxiety, by Education") +
+    labs(x="Week", y="Proportion", col='') +
+    scale_color_hue(labels=c("<hs", "some hs", " hs", "some col", 
+                               "AA", "BA", "grad")) +
+    theme_light() +
+    theme(text = element_text(family = "Cormorant Garamond", size=5.5),
+          legend.key.size = unit(0.5, 'lines'),
+          legend.text=element_text(size=6),
+          legend.margin=margin(1,1,1,1, unit="pt"),
+          legend.box.margin=margin(1,1,1,1, unit="pt")) +
+    scale_x_continuous(n.breaks = 10) ,
+  
+  ggplot(aggregate(a, by=list(a$WEEK, a$REGION.y), FUN=mean)) +
+    geom_line(aes(x=Group.1, y=DEP_ANX, group=Group.2, color=Group.2), lwd=0.2) +
+    ggtitle("Proportion of Adults with Depression or Anxiety, by Geographic Region") +
+    labs(x="Week", y="Proportion", col='') +
+    theme_light() +
+    theme(text = element_text(family = "Cormorant Garamond", size=5.5),
+          legend.key.size = unit(0.5, 'lines'),
+          legend.text=element_text(size=6),
+          legend.margin=margin(1,1,1,1, unit="pt"),
+          legend.box.margin=margin(1,1,1,1, unit="pt")) +
+    scale_x_continuous(n.breaks = 10) +
+    scale_color_hue(labels = c("ne", "mw", "s", "w")) ,
+  
+  ggplot(aggregate(a, by=list(a$WEEK, a$MS), FUN=mean)) +
+    geom_line(aes(x=Group.1, y=DEP_ANX, group=Group.2, color=Group.2), lwd=0.2) +
+    ggtitle("Proportion of Adults with Depression or Anxiety, by Marital Status") +
+    labs(x="Week", y="Proportion", col='') +
+    scale_color_hue(labels=c("married","widowed","divorced","separated","never"))+
+    theme_light() +
+    theme(text = element_text(family = "Cormorant Garamond", size=5.5),
+          legend.key.size = unit(0.5, 'lines'),
+          legend.text=element_text(size=6),
+          legend.margin=margin(1,1,1,1, unit="pt"),
+          legend.box.margin=margin(1,1,1,1, unit="pt")) +
+    scale_x_continuous(n.breaks = 10) ,
+  ncol=2
+)  
+
+```
+
+### Results
+
+To test my hypothesis, I estimate two logistic regressions with the likelihood of having symptoms of depression and anxiety as the dependent variable. I estimate the following equation: 
+$$dep\_anx_{i,t} = \alpha + \beta_1covid_{i,t} + \sum^{K}_{k=1}\gamma_kX_{k,{i,t}}+\epsilon_{i,t}$$
+
+where
+
+* *dep_anx* is an indicator that is 1 if individual *i* exhibits depression or anxiety symptoms;
+* *covid* is the 7-day rolling average of new daily Covid deaths or cases; and
+* *X* is a series of K control variables, including race, education, income, gender, and age.
+
+In Table 1 below, regression (1) uses the 7-day rolling average of new daily Covid deaths as an independent variable, and regression (2) uses the 7-day rolling average of new daily Covid cases as an independent variable. On average, each additional increase of daily Covid deaths is associated with a 3.3% (exp(0.033)-1) increase in the odds of experiencing depression or anxiety, and 0.1% for Covid cases. 
+
+```{r regressions, results='asis', echo=F}
+# GLM LOGIT MODEL
+reg1 <- glm(DEP_ANX ~ new_deaths_smoothed_per_million+
+             EGENDER+MS+INCOME+AGERANGE+RHISPANIC+RRACE+EEDUC+REGION.y, 
+            data=data,family ='binomial', na.action=na.omit)
+
+reg2 <- glm(DEP_ANX ~ new_cases_smoothed_per_million+
+             EGENDER+MS+INCOME+AGERANGE+RHISPANIC+RRACE+EEDUC+REGION.y, 
+            data=data,family ='binomial', na.action=na.omit)
+
+stargazer(reg1, reg2,
+          summary = F, font.size = 'scriptsize',
+          column.sep.width = "1pt",  single.row = T,
+          header=F, title = 'Logistic Regression Results',
+          dep.var.labels = "Proportion Adults with Depression or Anxiety",
+          no.space = T,
+          covariate.labels = c("deaths","cases","gender-male",
+                               "MS-widowed","MS-divorced","MS-separated","MS-never",
+                               "income 25-35k", "income 35-50k",
+                               "income 50-75k", "income 75-100k", "income 100-150k",
+                               "income 150-200k", "income >200k",
+                               "age 30-40", "age 40-50","age 50-60", 
+                               "age 60-70", "age 70-80", "age >80",
+                               "nonhispanic",
+                               "race-black", "race-asian", "race-other",
+                               "educ-some hs", "educ- hs", "educ-some col",
+                               "educ-AA", "educ-BA", "educ-grad",
+                               "region-mw", "region-s", "region-w", 
+                               "Constant"))
+```
+
+\newpage
+
+Regarding the heterogeneity of trends among subgroups, I observe the following:
+
+* Reporting male is associated with a 26.1% reduction in odds of experiencing depression or anxiety compared to reporting female. 
+* Compared to married respondents, reporting "separated" is associated with the highest increase in odds of worse mental health (55%), followed by "divorced" (29%), "never married" (23%), and "widowed" (16%).
+* Respondents with higher income and higher age are associated with a significant reduction in odds of experiencing worse mental health. Reporting a 200k+ yearly income is associated with a 70% reduction of odds of worse mental health, and being over 70 years old with a 80% reduction.
+* Nonhispanic respondents are associated with a 17% decrease of odds of worse mental health compared to hispanic respondents.
+* Compared to white respondents, reporting "asian" is associated with a 18% *increase* of odds of worse mental health, "black" with a 18% *reduction* in odds, and "other" respondents with a 6% *reduction* in odds.
+* Reporting higher education is associated with a decrease in odds of worse mental health. In particular, those having a college degree (AA, BA, graduate) are associated with a 17-20% decrease in odds compared to those without highschool education.
+* Geographic regions do not have significantly different mental health levels.
+
+### Discussion
+
+As expected, increased daily Covid deaths is associated with a 3.3% increase in odds of experiencing anxiety and depression. However, increased daily Covid cases is associated with a much smaller 0.1% increase. This may be because the effect of Covid cases is variable across local geographical regions: different regions experienced waves of cases at different times. By contrast, Covid deaths may have been more broadcasted across media, affecting the general public more jointly. Further analysis among smaller regions within the US may yield more accurate estimates of the association between Covid deaths or cases and mental health.
+
+In addition, reporting male, higher age, higher education, higher income, or hispanic is associated with much lower odds of experiencing anxiety and depression, as expected. However, the data shows that black respondents are associated with the lowest odds of depression of anxiety, which disproves my hypothesis that minority racial groups are associated with higher odds of depression of anxiety. 
+
+\newpage
+
+Given these findings, it is crucial for policy-makers to not only pursue policies that effectively fight the spread of Covid, but also bridge the mental health gap for minority groups. Indeed, this gap was likely a preexisting trend exacerbated by the pandemic. Policy-makers should consider encouraging lower education individuals to pursue higher education, for example by creating accessible, low-cost academic programs and scholarships. In addition, policy-makers should give minorities greater access to mental health services, for example by expanding telehealth programs and subsidizing costs of services.
+
+Regarding global implications, a possible extension of this project is to examine temporal trends of mental health across different countries during the COVID-19 pandemic. By comparing two demographically similar countries that suffered Covid outbreaks at different times (for example, the United States and Canada), it may be possible to estimate the causal effect of the COVID-19 pandemic on mental health [@Alfano_2020]. For instance, while stay-at-home orders are effective in fighting the spread of Covid [@Friedson_2020], they may have adverse effects on the population's mental health [@Xu_2020]. These findings will push policy-makers to take mental health into consideration when designing policies in future global emergencies and economic downturns.
+
+\newpage
+
+### References
